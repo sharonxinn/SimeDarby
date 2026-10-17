@@ -1,0 +1,304 @@
+/* =========================================================================
+   SOLARSYNC — ARCHITECTURAL URBAN PLANNING DESIGN SYSTEM
+   Strict Palette: Light Blue, Black, and White Only
+   Natural, Light Blue Background Theme with Crisp Modern Typography
+   ========================================================================= */
+
+:root {
+  /* Light Blue Atmospheric Backgrounds */
+  --bg-app: #eaf5fe;
+  --bg-app-gradient: linear-gradient(180deg, #e3f2fd 0%, #edf7ff 40%, #e1f0fc 100%);
+  --bg-deep: #daf0fe;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #f4faff;
+  --bg-surface-hover: #eaf5ff;
+
+  /* Natural Light Blues */
+  --blue-sky: #0284c7;           /* Active Sky Blue */
+  --blue-bright: #0ea5e9;        /* Bright Sky */
+  --blue-light: #38bdf8;         /* Light Blue */
+  --blue-ice: #7dd3fc;           /* Soft Ice Blue */
+  --blue-pale: #bae6fd;          /* Very Pale Blue */
+  --blue-tint-soft: #f0f9ff;     /* Air Blue */
+
+  /* Light Blue Borders & Tints */
+  --blue-tint-4: rgba(2, 132, 199, 0.04);
+  --blue-tint-8: rgba(2, 132, 199, 0.08);
+  --blue-tint-15: rgba(2, 132, 199, 0.14);
+  --blue-border: #bae6fd;
+  --blue-border-strong: #7dd3fc;
+  --blue-border-subtle: #e0f2fe;
+
+  /* Blacks & Grayscale (Crisp high contrast) */
+  --text-pure-black: #000000;
+  --text-dark: #090d16;
+  --text-charcoal: #1e293b;
+  --text-muted: #475569;
+  --text-dim: #64748b;
+  --text-white: #ffffff;
+  --border-card: #cbe6fa;
+  --border-card-subtle: #e2eef8;
+
+  /* Natural Ambient Soft Drop Shadows */
+  --shadow-sm: 0 1px 3px rgba(2, 132, 199, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 14px rgba(2, 132, 199, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 28px rgba(2, 132, 199, 0.12), 0 3px 6px rgba(0, 0, 0, 0.04);
+
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-heading: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 9999px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-app);
+  color: var(--text-charcoal);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.55;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app-gradient);
+}
+
+/* Subtle, Natural Micro-Animations */
+@keyframes gentleBreathe {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+@keyframes softPulseMarker {
+  0% {
+    box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(2, 132, 199, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(2, 132, 199, 0);
+  }
+}
+
+@keyframes naturalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #e2effa;
+}
+::-webkit-scrollbar-thumb {
+  background: #93c5fd;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #60a5fa;
+}
+
+/* Clean, Natural Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12.5px;
+  padding: 7px 14px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid transparent;
+  outline: none;
+  user-select: none;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--blue-sky);
+  color: var(--text-white);
+  border-color: var(--blue-bright);
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.25);
+}
+
+.btn-primary:hover {
+  background: #0369a1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+}
+
+.btn-secondary {
+  background: #ffffff;
+  color: var(--text-dark);
+  border: 1px solid var(--blue-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.btn-secondary:hover {
+  background: #f0f9ff;
+  border-color: var(--blue-sky);
+  color: var(--blue-sky);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-charcoal);
+  border: 1px solid transparent;
+}
+
+.btn-ghost:hover {
+  background: var(--blue-tint-8);
+  color: var(--blue-sky);
+  border-color: var(--blue-border);
+}
+
+/* Natural White Surface Card */
+.glass-card {
+  background: #ffffff;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  position: relative;
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.glass-card:hover {
+  border-color: var(--blue-border-strong);
+}
+
+.glass-card-interactive {
+  cursor: pointer;
+}
+
+.glass-card-interactive:hover {
+  border-color: var(--blue-sky);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Natural Pills & Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.2px;
+}
+
+.badge-blue {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.badge-white {
+  background: #f8fafc;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+}
+
+.badge-rank {
+  background: #0284c7;
+  color: #ffffff;
+  font-weight: 700;
+  border: 1px solid #0369a1;
+}
+
+/* Range Sliders */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 5px;
+  background: #bae6fd;
+  border-radius: 4px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--blue-sky);
+  border: 2px solid #ffffff;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(2, 132, 199, 0.4);
+  transition: transform 0.12s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+/* Leaflet Map Natural Light Theme Styling */
+.leaflet-container {
+  background-color: #e0f2fe !important;
+  font-family: var(--font-sans) !important;
+}
+
+.dark-tiles {
+  filter: saturate(90%) brightness(98%) contrast(102%);
+}
+
+.leaflet-popup-content-wrapper {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #bae6fd !important;
+  border-radius: 10px !important;
+  box-shadow: 0 10px 25px rgba(2, 132, 199, 0.15) !important;
+  padding: 2px !important;
+}
+
+.leaflet-popup-tip {
+  background: #ffffff !important;
+  border-color: #bae6fd !important;
+}
+
+.leaflet-popup-close-button {
+  color: #64748b !important;
+}
+
+.leaflet-popup-close-button:hover {
+  color: #0284c7 !important;
+}
