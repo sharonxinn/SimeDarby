@@ -42,4 +42,6 @@ def retired(legacy_path: str):
 
 # Registered after API routes so /api failures never fall through to index.html.
 from frontend_hosting import configure_hosting
-configure_hosting(app, os.getenv('SOLARSYNC_STATIC_DIR'), os.getenv('SOLARSYNC_ACCESS_USER', 'solarsync'), os.getenv('SOLARSYNC_ACCESS_PASSWORD'))
+configure_hosting(app, os.getenv('SOLARSYNC_STATIC_DIR'), os.getenv('SOLARSYNC_ACCESS_USER', 'solarsync'), os.getenv('SOLARSYNC_ACCESS_PASSWORD'),
+                  public_access=os.getenv('SOLARSYNC_PUBLIC_ACCESS', '').lower() == 'true',
+                  visitor_directory=os.getenv('SOLARSYNC_VISITOR_DIR', '/tmp/solarsync/visitors'), bundle=os.getenv('SOLARSYNC_BOOTSTRAP_DIR'))

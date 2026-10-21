@@ -5,10 +5,12 @@ building in Explore; Plan uses that same building, its recorded evidence and its
 saved solar/EV implementation scenario.
 
 For hosted deployment, see [DEPLOYMENT.md](DEPLOYMENT.md). The Render setup serves
-the frontend and Python API together on the free instance plan and protects
-shared records with a generated deployment password. Free hosting uses temporary
+the frontend and Python API together on the free instance plan. Visitors use
+separate browser sessions without a username or password. Free hosting uses temporary
 storage: records and scenarios can reset on sleep/restart/redeploy. Export important
 records from Plan. Public datasets reload from verified bundled snapshots.
+The anonymous session uses an HTTP-only cookie. Clearing it or changing browsers
+starts a separate workspace; export important records before doing so.
 
 ## Evidence policy
 

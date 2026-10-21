@@ -18,7 +18,7 @@ services:
         value: /app/dist
       - key: SOLARSYNC_BOOTSTRAP_DIR
         value: /app/deployment-data
-      - key: SOLARSYNC_ACCESS_USER
-        value: solarsync
-      - key: SOLARSYNC_ACCESS_PASSWORD
-        generateValue: true
+      - key: SOLARSYNC_PUBLIC_ACCESS
+        value: "true"
+      - key: SOLARSYNC_VISITOR_DIR
+        value: /tmp/solarsync/visitors
