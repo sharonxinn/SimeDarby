@@ -10,7 +10,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return response.json();
 }
 export const roofApi = {
-  health: () => request<{ status: string; dataMode: string }>('/health'),
+  health: () => request<{ status: string; dataMode: string; storageMode?: string }>('/health'),
   dataStatus: () => request<DataStatus>('/data-status'),
   regions: (query: string) => request<RoofRegion[]>(`/roofs/regions?q=${encodeURIComponent(query)}`),
   buildings: (bounds: number[], signal: AbortSignal) => request<BuildingResponse>(`/roofs/buildings?${new URLSearchParams(Object.fromEntries(['south', 'west', 'north', 'east'].map((key, index) => [key, String(bounds[index])])) )}`, { signal }),

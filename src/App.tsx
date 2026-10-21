@@ -13,11 +13,12 @@ export default function App() {
   const [assessment, setAssessment] = useState<RoofAssessment | null>(null);
   const [online, setOnline] = useState(false);
   const [checked, setChecked] = useState(false);
+  const [temporaryStorage, setTemporaryStorage] = useState(false);
   function changePage(page: TabKey) { setActiveTab(page); setVisitedPages(previous => new Set([...previous, page])); }
   function updateSiteRecord(updated: RoofAssessment) { setAssessment(current => current?.siteKey === updated.siteKey ? updated : current); }
   useEffect(() => {
     let active = true;
-    async function check() { try { const health = await roofApi.health(); if (active) setOnline(health.status === 'online' && health.dataMode === 'evidence_only'); } catch { if (active) setOnline(false); } finally { if (active) setChecked(true); } }
+    async function check() { try { const health = await roofApi.health(); if (active) { setOnline(health.status === 'online' && health.dataMode === 'evidence_only'); setTemporaryStorage(health.storageMode === 'ephemeral'); } } catch { if (active) setOnline(false); } finally { if (active) setChecked(true); } }
     check(); const timer = setInterval(check, 30000);
     return () => { active = false; clearInterval(timer); };
   }, []);
@@ -25,6 +26,7 @@ export default function App() {
     <Header backendOnline={online} checking={!checked} />
     <NavigationTabs activeTab={activeTab} onTabChange={changePage} />
     <main className="app-main">
+      {temporaryStorage && <p role="status" className="notice">Free hosting: saved site records and scenarios can reset when the server sleeps, restarts or redeploys. Use Export records in Plan to keep a copy. Public solar datasets reload automatically.</p>}
       {checked && !online && <p role="status" className="notice">The evidence API is unavailable. No demonstration data or estimated results are substituted.</p>}
       <section hidden={activeTab !== 'map'} aria-label="Explore page"><SolarOpportunityMap assessment={assessment} onAssessmentChange={setAssessment} onOpenPlan={() => changePage('plan')} /></section>
       {visitedPages.has('plan') && <section hidden={activeTab !== 'plan'} aria-label="Plan page"><SitePlanView key={assessment?.siteKey || 'none'} assessment={assessment} onAssessmentChange={updateSiteRecord} onExplore={() => changePage('map')} /></section>}

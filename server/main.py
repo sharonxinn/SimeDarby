@@ -20,7 +20,7 @@ app.include_router(roof_router)
 def health():
     with closing(get_connection()) as conn:
         conn.execute('SELECT 1').fetchone()
-    return {'status': 'online', 'service': 'SolarSync Site Evidence', 'dataMode': 'evidence_only'}
+    return {'status': 'online', 'service': 'SolarSync Site Evidence', 'dataMode': 'evidence_only', 'storageMode': os.getenv('SOLARSYNC_STORAGE_MODE', 'local')}
 
 @app.get('/api/data-status')
 def status():

@@ -1,58 +1,53 @@
-# Render deployment
+# Free Render deployment
 
-Deploy the frontend and API together as one Docker web service in Singapore.
-`render.yaml` declares a Starter instance and 1 GB persistent disk. These are
-paid resources; review Render's current price before creating the service.
-Automatic deploys are off so future repository changes do not publish silently.
+The frontend and Python API deploy together as one Docker web service in Singapore.
+`render.yaml` selects **plan: free**, with **no paid disk or database**. Automatic
+redeploys are off. Review the Render workspace usage/spending settings: bandwidth
+and build quotas still apply; this configuration does not provision paid resources.
+
+[Deploy this branch to Render](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fsharonxinn%2FSimeDarby%2Ftree%2Fcodex%2Frender-deployment)
 
 ## Publish
 
-1. Push this application version, including `Dockerfile`, `render.yaml`,
-   `server/` and `deployment-data/`, to the GitHub repository.
-2. In Render choose **New → Blueprint**, connect the repository and choose the
-   branch containing these deployment files. Review the proposed resources/cost.
-3. Create the Blueprint. The Docker build compiles React; Python serves both
-   the built frontend and `/api` under the generated HTTPS URL.
-4. Wait for the deployment to become live. `/api/health` must return HTTP 200.
-5. Open the HTTPS URL. Username is `solarsync`; retrieve the generated
-   `SOLARSYNC_ACCESS_PASSWORD` from Render's service environment settings.
-   Do not put this password in the repository or a shared URL.
+1. Open the deployment link while signed in to Render. For a private repository,
+   grant Render access to the repository when prompted.
+2. Review the Blueprint: one **Free** web service, no disk and no paid database.
+3. Create the Blueprint and wait for the Docker build and health check to pass.
+4. Open the generated HTTPS URL. Username is `solarsync`; retrieve the generated
+   `SOLARSYNC_ACCESS_PASSWORD` from the service environment settings. Keep it out
+   of the repository and shared URLs.
 
-## Storage and access
+## Free-tier limits and storage
 
-SQLite and imported source archives live under `/var/data`, the persistent disk
-mount. One application process is intentional for this SQLite deployment.
-Do not remove the disk or switch to ephemeral storage if saved records matter.
-The password protects the whole app, API and API documentation. Health exposes
-only service connectivity. Shared-password users access the same site records;
-this is a small-team deployment, not a multi-tenant account system.
+Render sleeps free services after 15 minutes without requests. A new visit wakes
+it, with a cold-start delay. Local files, including the SQLite database, are lost
+on sleep, restart and redeploy. Free services cannot attach persistent disks.
+The app displays this limit and Plan offers **Export records** to save a JSON copy.
+Records can be re-entered from that copy; there is no automatic JSON restore yet.
+Shared-password users see the same temporary server records. This is a small-team
+preview, not a durable multi-tenant account system.
 
-The image includes **only verified public NASA and data.gov.my snapshots** from
-`deployment-data/manifest.json`. Bootstrap validates SHA-256, runs the existing
-import validation, and imports only into empty dataset tables. Restarts and
-redeploys preserve existing data. Local databases, local raw data directories,
-meter files, site records and scenario histories are excluded from the image.
-OSM building data is fetched/cached on demand by the hosted application.
+The database and raw imports use `/tmp/solarsync`. A fresh server loads checksum-
+verified public NASA and data.gov.my snapshots from `deployment-data/manifest.json`.
+No local meter data, site records, scenario histories, local database or secrets
+are uploaded. OSM geometry is fetched and cached on demand. The image has all
+public solar inputs needed for a forecast without an initial NASA download.
+Free services do not provide Render Shell access; update bundled public data in
+the repository deliberately and redeploy when a new complete resource year is needed.
 
-Refresh public sources deliberately from the Render Shell:
-
-```sh
-python server/pipeline.py --source all --year 2025
-```
+For durable records later, provision a supported persistent external database or
+move to a paid service with a disk; this requires a separate storage configuration.
 
 ## Local production check
 
-With Docker Desktop's Linux engine running:
+With Docker Desktop's Linux engine running and SOLARSYNC_ACCESS_PASSWORD set:
 
 ```sh
 docker build -t solarsync .
-docker volume create solarsync-data
-docker run --rm -p 10000:10000 -v solarsync-data:/var/data -e SOLARSYNC_ACCESS_PASSWORD solarsync
+docker run --rm -p 10000:10000 -e SOLARSYNC_ACCESS_PASSWORD -e SOLARSYNC_DB_PATH=/tmp/solarsync/app.db -e SOLARSYNC_DATA_DIR=/tmp/solarsync/raw -e SOLARSYNC_STORAGE_MODE=ephemeral solarsync
 ```
 
-Set `SOLARSYNC_ACCESS_PASSWORD` in your shell first. Use `solarsync` as the
-username. The service honors Render's `PORT` environment variable.
-
-Relevant official references: [Blueprints](https://render.com/docs/blueprint-spec),
-[Docker](https://render.com/docs/docker), [persistent disks](https://render.com/docs/disks),
-[health checks](https://render.com/docs/health-checks).
+The service honors Render's `PORT` environment variable. Relevant official docs:
+[free-tier limits](https://render.com/docs/free),
+[Blueprints](https://render.com/docs/blueprint-spec),
+[Docker](https://render.com/docs/docker).

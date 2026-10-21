@@ -3,19 +3,17 @@ services:
     name: solarsync-selangor
     runtime: docker
     region: singapore
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     autoDeployTrigger: off
-    disk:
-      name: solarsync-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: SOLARSYNC_DB_PATH
-        value: /var/data/township_solar.db
+        value: /tmp/solarsync/township_solar.db
       - key: SOLARSYNC_DATA_DIR
-        value: /var/data/source-archives
+        value: /tmp/solarsync/source-archives
+      - key: SOLARSYNC_STORAGE_MODE
+        value: ephemeral
       - key: SOLARSYNC_STATIC_DIR
         value: /app/dist
       - key: SOLARSYNC_BOOTSTRAP_DIR

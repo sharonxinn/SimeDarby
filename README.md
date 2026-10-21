@@ -5,8 +5,10 @@ building in Explore; Plan uses that same building, its recorded evidence and its
 saved solar/EV implementation scenario.
 
 For hosted deployment, see [DEPLOYMENT.md](DEPLOYMENT.md). The Render setup serves
-the frontend and Python API together, retains SQLite on a persistent disk and
-protects shared records with a generated deployment password.
+the frontend and Python API together on the free instance plan and protects
+shared records with a generated deployment password. Free hosting uses temporary
+storage: records and scenarios can reset on sleep/restart/redeploy. Export important
+records from Plan. Public datasets reload from verified bundled snapshots.
 
 ## Evidence policy
 
