@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local backend state and raw source snapshots
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+server/*.db
+server/*.db-*
+server/data/
+.env
+.test-tmp-*/

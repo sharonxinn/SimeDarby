@@ -1,0 +1,3 @@
+# Public snapshots are byte-for-byte archives with recorded SHA-256 values.
+deployment-data/*.csv -text
+deployment-data/*.json -text

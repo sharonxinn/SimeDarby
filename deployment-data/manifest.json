@@ -1,0 +1,23 @@
+{
+  "description": "Actual public snapshots only; no local site, meter or scenario records",
+  "datasets": [
+    {
+      "source": "nasa",
+      "file": "nasa-2025.json",
+      "sha256": "bc8c0ddf849d62c09d0e0ce7d70d7423e711f24819fc2919c055856782a5dab9",
+      "year": 2025,
+      "sourceUrl": "https://power.larc.nasa.gov/api/temporal/daily/point?parameters=ALLSKY_SFC_SW_DWN,T2M&community=RE&longitude=101.5235&latitude=3.1812&start=20250101&end=20251231&format=JSON&time-standard=LST",
+      "originalImportedAt": "2026-10-21T15:08:12.701479+00:00",
+      "rows": 365
+    },
+    {
+      "source": "electricity",
+      "file": "malaysia-electricity.csv",
+      "sha256": "365918d0cfe987f2eac8529baf4fbffa055b1eee0c4ed595bd477f7a0b2d195f",
+      "year": 2025,
+      "sourceUrl": "https://storage.data.gov.my/energy/electricity_consumption.csv",
+      "originalImportedAt": "2026-10-21T15:08:12.911149+00:00",
+      "rows": 612
+    }
+  ]
+}

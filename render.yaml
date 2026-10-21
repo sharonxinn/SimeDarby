@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: solarsync-selangor
+    runtime: docker
+    region: singapore
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeployTrigger: off
+    envVars:
+      - key: SOLARSYNC_DB_PATH
+        value: /tmp/solarsync/township_solar.db
+      - key: SOLARSYNC_DATA_DIR
+        value: /tmp/solarsync/source-archives
+      - key: SOLARSYNC_STORAGE_MODE
+        value: ephemeral
+      - key: SOLARSYNC_STATIC_DIR
+        value: /app/dist
+      - key: SOLARSYNC_BOOTSTRAP_DIR
+        value: /app/deployment-data
+      - key: SOLARSYNC_ACCESS_USER
+        value: solarsync
+      - key: SOLARSYNC_ACCESS_PASSWORD
+        generateValue: true
