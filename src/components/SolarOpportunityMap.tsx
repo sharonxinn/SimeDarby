@@ -1,700 +1,131 @@
 import React, { useEffect, useRef, useState } from 'react';
-import L from 'leaflet';
-import {
-  Layers,
-  Sun,
-  AlertCircle,
-  Building2,
-  Car,
-  Filter,
-  ArrowRight,
-  Maximize2,
-} from 'lucide-react';
-import type { SolarSite, TownshipConfig } from '../types/solar';
-import { formatNumber } from '../utils/solarEngine';
+import { Search, MousePointer2, PencilRuler, RotateCcw } from 'lucide-react';
+import { STARTER_REGIONS, type RoofRegion, type RoofBuilding, type RoofAssessment } from '../types/roof';
+import { roofApi } from '../api/roofClient';
+import { RoofSatelliteMap } from './RoofSatelliteMap';
+import { ImplementationScenarioView } from './ImplementationScenarioView';
 
-interface SolarOpportunityMapProps {
-  sites: SolarSite[];
-  selectedSiteId: string | null;
-  onSelectSite: (siteId: string) => void;
-  onViewDeepDive: (site: SolarSite) => void;
-  township: TownshipConfig;
+type Point = [number, number];
+interface Props { assessment: RoofAssessment | null; onAssessmentChange: (value: RoofAssessment | null) => void; onOpenPlan: () => void }
+function contains(point: Point, outline: Point[]) {
+  const [y, x] = point; let inside = false;
+  for (let i = 0, j = outline.length - 1; i < outline.length; j = i++) {
+    const [yi, xi] = outline[i], [yj, xj] = outline[j];
+    if (((yi > y) !== (yj > y)) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
 }
+const fmt = (value: number, decimals = 0) => value.toLocaleString('en-MY', { maximumFractionDigits: decimals });
 
-export const SolarOpportunityMap: React.FC<SolarOpportunityMapProps> = ({
-  sites,
-  selectedSiteId,
-  onSelectSite,
-  onViewDeepDive,
-  township,
-}) => {
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
-  const markersRef = useRef<{ [key: string]: L.Layer }>({});
-
-  const [filterType, setFilterType] = useState<string>('all');
-  const [showFlagsOnly, setShowFlagsOnly] = useState<boolean>(false);
-  const [mapMode, setMapMode] = useState<'osm' | 'blueprint'>('osm');
-
-  const selectedSite = sites.find((s) => s.id === selectedSiteId) || sites[0];
-
-  const filteredSites = sites.filter((site) => {
-    if (filterType !== 'all') {
-      if (filterType === 'rooftop' && site.type !== 'rooftop') return false;
-      if (filterType === 'carpark' && site.type !== 'carpark') return false;
-      if (filterType === 'commercial' && site.category !== 'Commercial') return false;
+export const SolarOpportunityMap: React.FC<Props> = props => {
+  const [region, setRegion] = useState(STARTER_REGIONS[0]);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<RoofRegion[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [viewport, setViewport] = useState<{ bounds: number[]; zoom: number } | null>(null);
+  const [buildings, setBuildings] = useState<RoofBuilding[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [coverage, setCoverage] = useState('');
+  const [reload, setReload] = useState(0);
+  const [outlinesVisible, setOutlinesVisible] = useState(true);
+  const [selectedOutline, setSelectedOutline] = useState<Point[]>([]);
+  const [tracing, setTracing] = useState(false);
+  const [tracePoints, setTracePoints] = useState<Point[]>([]);
+  const [message, setMessage] = useState('');
+  const assessment = props.assessment;
+  const setAssessment = props.onAssessmentChange;
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState('');
+  const [history, setHistory] = useState<RoofAssessment[]>([]);
+  const sequence = useRef(0);
+  useEffect(() => { roofApi.history().then(setHistory).catch(() => {}); }, []);
+  useEffect(() => {
+    if (!viewport) return;
+    const [s, w, n, e] = viewport.bounds;
+    setBuildings([]); setLoadError(''); setCoverage('');
+    if (viewport.zoom < 17 || n - s > .016 || e - w > .022) {
+      setLoading(false); setMessage('Zoom to level 17 or closer to load individual building outlines.'); return;
     }
-    if (showFlagsOnly) {
-      const hasFlags =
-        !site.flags.roofConditionVerified ||
-        !site.flags.structuralInspectionDone ||
-        !site.flags.shadingAssessed ||
-        !site.flags.gridCapacityConfirmed;
-      if (!hasFlags) return false;
-    }
-    return true;
-  });
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setLoading(true);
+      roofApi.buildings(viewport.bounds, controller.signal).then(value => {
+        if (controller.signal.aborted) return;
+        setBuildings(value.buildings);
+        setCoverage(`${value.buildings.length} building outlines${value.cached ? ' · cached' : ' · live OSM'}${value.truncated ? ' · zoom in for the remaining buildings' : ''}`);
+        setMessage(value.buildings.length ? 'Click a cyan building outline to assess that roof.' : 'No mapped building outlines here. Zoom or trace a visible roof.');
+      }).catch(error => { if (!controller.signal.aborted) setLoadError(error.message); })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    }, 550);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [viewport, reload]);
 
-  // Initialize Leaflet Map
-  useEffect(() => {
-    if (!mapContainerRef.current) return;
-    if (mapInstanceRef.current) return;
-
-    const map = L.map(mapContainerRef.current, {
-      center: township.coordinates,
-      zoom: township.zoom,
-      zoomControl: false,
-      attributionControl: false,
-    });
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      className: 'dark-tiles',
-      maxZoom: 19,
-    }).addTo(map);
-
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
-    mapInstanceRef.current = map;
-
-    return () => {
-      map.remove();
-      mapInstanceRef.current = null;
-    };
-  }, [township]);
-
-  // Update polygon layers and markers
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-
-    Object.values(markersRef.current).forEach((layer) => {
-      map.removeLayer(layer);
-    });
-    markersRef.current = {};
-
-    filteredSites.forEach((site) => {
-      const isSelected = site.id === selectedSiteId;
-      const isCarPark = site.type === 'carpark';
-
-      // Clean polygon boundary
-      const polygon = L.polygon(site.polygon, {
-        color: isSelected ? '#000000' : '#0284c7',
-        weight: isSelected ? 3 : 2,
-        fillColor: '#38bdf8',
-        fillOpacity: isSelected ? 0.6 : 0.25,
-        dashArray: isCarPark ? '4, 4' : undefined,
-      }).addTo(map);
-
-      // Clean architectural pin
-      const iconHtml = `
-        <div style="
-          background: ${isSelected ? '#0284c7' : '#ffffff'};
-          color: ${isSelected ? '#ffffff' : '#090d16'};
-          border: 1.5px solid ${isSelected ? '#0369a1' : '#0284c7'};
-          border-radius: 6px;
-          padding: 3px 7px;
-          font-family: 'Inter', sans-serif;
-          font-weight: 700;
-          font-size: 10px;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          box-shadow: 0 2px 8px rgba(2, 132, 199, 0.2);
-          white-space: nowrap;
-          cursor: pointer;
-          transform: translate(-50%, -50%);
-          transition: all 0.15s ease;
-        ">
-          <span>${site.code}</span>
-          <span style="opacity: 0.85; font-weight: 500;">${site.estimatedKWp}kWp</span>
-        </div>
-      `;
-
-      const customIcon = L.divIcon({
-        className: 'natural-site-marker',
-        html: iconHtml,
-        iconSize: [60, 22],
-      });
-
-      const marker = L.marker(site.coordinates, { icon: customIcon }).addTo(map);
-
-      const handleClick = () => {
-        onSelectSite(site.id);
-      };
-
-      polygon.on('click', handleClick);
-      marker.on('click', handleClick);
-
-      markersRef.current[site.id] = L.layerGroup([polygon, marker]);
-    });
-  }, [filteredSites, selectedSiteId]);
-
-  // Smoothly pan to selected site
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map || !selectedSite) return;
-    map.flyTo(selectedSite.coordinates, 16, {
-      duration: 0.8,
-      easeLinearity: 0.25,
-    });
-  }, [selectedSiteId]);
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-      {/* Natural Filter Bar */}
-      <div
-        className="glass-card"
-        style={{
-          padding: '10px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Filter size={13} color="var(--blue-sky)" />
-            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>
-              Filter Sites:
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', gap: '4px' }}>
-            {[
-              { id: 'all', label: 'All Sites (12)' },
-              { id: 'rooftop', label: 'Rooftops' },
-              { id: 'carpark', label: 'Car Parks / Canopies' },
-              { id: 'commercial', label: 'High Daytime Commercial' },
-            ].map((btn) => (
-              <button
-                key={btn.id}
-                onClick={() => setFilterType(btn.id)}
-                className="btn"
-                style={{
-                  fontSize: '11.5px',
-                  padding: '4px 10px',
-                  background: filterType === btn.id ? 'var(--blue-sky)' : '#ffffff',
-                  color: filterType === btn.id ? '#ffffff' : 'var(--text-dark)',
-                  border: `1px solid ${filterType === btn.id ? 'var(--blue-sky)' : 'var(--blue-border)'}`,
-                  fontWeight: filterType === btn.id ? 600 : 500,
-                  boxShadow: filterType === btn.id ? '0 1px 4px rgba(2, 132, 199, 0.2)' : 'none',
-                }}
-              >
-                {btn.label}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ width: '1px', height: '16px', background: 'var(--blue-border)' }} />
-
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '11.5px',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              userSelect: 'none',
-              fontWeight: 500,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={showFlagsOnly}
-              onChange={(e) => setShowFlagsOnly(e.target.checked)}
-              style={{ accentColor: 'var(--blue-sky)' }}
-            />
-            <AlertCircle size={13} color="var(--blue-sky)" />
-            Missing Site Information Only
-          </label>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            onClick={() => setMapMode(mapMode === 'osm' ? 'blueprint' : 'osm')}
-            className="btn btn-secondary"
-            style={{ fontSize: '11.5px', padding: '4px 10px' }}
-          >
-            <Layers size={13} />
-            {mapMode === 'osm' ? 'Architectural Cadastre View' : 'Geographic Map View'}
-          </button>
-        </div>
-      </div>
-
-      {/* Grid: Map + Site Inspector */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.8fr) minmax(360px, 1fr)',
-          gap: '14px',
-          alignItems: 'stretch',
-        }}
-      >
-        {/* Map Container */}
-        <div
-          className="glass-card"
-          style={{
-            minHeight: '620px',
-            position: 'relative',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}
-        >
-          {mapMode === 'osm' ? (
-            <div
-              id="map-container"
-              ref={mapContainerRef}
-              style={{
-                width: '100%',
-                height: '100%',
-                minHeight: '620px',
-              }}
-            />
-          ) : (
-            /* Architectural Master Plan Cadastre (Clean Architectural Blueprint on Light Blue) */
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                minHeight: '620px',
-                background: '#eaf4fe',
-                position: 'relative',
-                overflow: 'hidden',
-                padding: '24px',
-              }}
-            >
-              {/* Drafting Lines */}
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  backgroundImage:
-                    'linear-gradient(rgba(2, 132, 199, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(2, 132, 199, 0.08) 1px, transparent 1px)',
-                  backgroundSize: '36px 36px',
-                }}
-              />
-
-              <div
-                style={{
-                  position: 'relative',
-                  zIndex: 2,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '16px',
-                }}
-              >
-                <div>
-                  <h3 style={{ fontFamily: 'var(--font-heading)', color: 'var(--text-pure-black)', fontSize: '16px', fontWeight: 700 }}>
-                    Township Cadastre & Usable Rooftop Footprints
-                  </h3>
-                  <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    Vector footprints mapped to municipal plot boundaries
-                  </p>
-                </div>
-                <span className="badge badge-blue">Architectural Drafting Plan</span>
-              </div>
-
-              {/* Cadastre Building Grid */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
-                  gap: '10px',
-                  position: 'relative',
-                  zIndex: 2,
-                  maxHeight: '520px',
-                  overflowY: 'auto',
-                  paddingRight: '6px',
-                }}
-              >
-                {filteredSites.map((site) => {
-                  const isSelected = site.id === selectedSiteId;
-                  return (
-                    <div
-                      key={site.id}
-                      onClick={() => onSelectSite(site.id)}
-                      className="glass-card glass-card-interactive"
-                      style={{
-                        padding: '12px',
-                        background: isSelected ? '#e0f2fe' : '#ffffff',
-                        borderColor: isSelected ? 'var(--blue-sky)' : 'var(--blue-border)',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span className="badge badge-white" style={{ fontSize: '9.5px', background: '#f0f9ff' }}>
-                          {site.code}
-                        </span>
-                        <span style={{ fontSize: '10.5px', color: 'var(--blue-sky)', fontWeight: 700 }}>
-                          {formatNumber(site.usableAreaSqM)} m² usable
-                        </span>
-                      </div>
-
-                      <h4
-                        style={{
-                          fontSize: '12.5px',
-                          color: 'var(--text-dark)',
-                          marginTop: '6px',
-                          fontWeight: 700,
-                          lineHeight: 1.3,
-                        }}
-                      >
-                        {site.name}
-                      </h4>
-
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '5px',
-                          marginTop: '4px',
-                          fontSize: '10.5px',
-                          color: 'var(--text-muted)',
-                        }}
-                      >
-                        {site.type === 'carpark' ? <Car size={11} color="var(--blue-sky)" /> : <Building2 size={11} color="var(--blue-sky)" />}
-                        <span>{site.category}</span>
-                      </div>
-
-                      <div
-                        style={{
-                          marginTop: '8px',
-                          paddingTop: '6px',
-                          borderTop: '1px solid var(--blue-border)',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          fontSize: '10.5px',
-                        }}
-                      >
-                        <span style={{ color: 'var(--text-muted)' }}>Capacity:</span>
-                        <span style={{ color: 'var(--blue-sky)', fontWeight: 700 }}>
-                          {site.estimatedKWp} kWp
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Clean Map Footer Bar */}
-          <div
-            style={{
-              position: 'absolute',
-              bottom: '14px',
-              left: '14px',
-              zIndex: 1000,
-              background: '#ffffff',
-              border: '1px solid var(--blue-border)',
-              borderRadius: '6px',
-              padding: '6px 12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              fontSize: '11px',
-              boxShadow: '0 2px 8px rgba(2, 132, 199, 0.1)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <div
-                style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  background: 'var(--blue-sky)',
-                }}
-              />
-              <span style={{ color: 'var(--text-pure-black)', fontWeight: 600 }}>
-                {filteredSites.length} of {sites.length} Sites Displayed
-              </span>
-            </div>
-            <div style={{ width: '1px', height: '10px', background: 'var(--blue-border)' }} />
-            <span style={{ color: 'var(--text-muted)' }}>
-              OpenStreetMap Cadastre • Global Solar Atlas Benchmark
-            </span>
-          </div>
-        </div>
-
-        {/* Site Inspector Card */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {selectedSite ? (
-            <div
-              className="glass-card"
-              style={{
-                padding: '18px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '14px',
-              }}
-            >
-              {/* Header */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                    <span className="badge badge-rank">{selectedSite.code}</span>
-                    <span className="badge badge-blue">{selectedSite.category}</span>
-                    <span className="badge badge-white">{selectedSite.zone}</span>
-                  </div>
-                  <button
-                    onClick={() => onViewDeepDive(selectedSite)}
-                    className="btn btn-secondary"
-                    style={{ fontSize: '11px', padding: '3px 8px' }}
-                    title="Detailed Technical Sheet"
-                  >
-                    <Maximize2 size={11} />
-                    Details
-                  </button>
-                </div>
-
-                <h3
-                  style={{
-                    fontFamily: 'var(--font-heading)',
-                    fontSize: '17px',
-                    fontWeight: 700,
-                    color: 'var(--text-pure-black)',
-                    marginTop: '8px',
-                  }}
-                >
-                  {selectedSite.name}
-                </h3>
-                <p style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  {selectedSite.type === 'rooftop' ? 'Rooftop Solar Asset' : 'Surface Car Park Canopy'} • Coordinates: [
-                  {selectedSite.coordinates[0].toFixed(4)}, {selectedSite.coordinates[1].toFixed(4)}]
-                </p>
-              </div>
-
-              {/* Specification Grid */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(2, 1fr)',
-                  gap: '8px',
-                }}
-              >
-                <div
-                  style={{
-                    background: '#f0f9ff',
-                    border: '1px solid var(--blue-border)',
-                    borderRadius: '8px',
-                    padding: '8px 10px',
-                  }}
-                >
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Usable Surface</span>
-                  <div
-                    style={{
-                      fontSize: '15px',
-                      fontWeight: 700,
-                      color: 'var(--text-pure-black)',
-                      marginTop: '2px',
-                    }}
-                  >
-                    {formatNumber(selectedSite.usableAreaSqM)} m²
-                  </div>
-                  <span style={{ fontSize: '10px', color: 'var(--blue-sky)' }}>
-                    {(selectedSite.usableRatio * 100).toFixed(0)}% of {formatNumber(selectedSite.footprintSqM)} m² roof
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    background: '#f0f9ff',
-                    border: '1px solid var(--blue-border)',
-                    borderRadius: '8px',
-                    padding: '8px 10px',
-                  }}
-                >
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Solar Capacity</span>
-                  <div
-                    style={{
-                      fontSize: '15px',
-                      fontWeight: 700,
-                      color: 'var(--blue-sky)',
-                      marginTop: '2px',
-                    }}
-                  >
-                    {selectedSite.estimatedKWp} kWp
-                  </div>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                    ~{Math.round(selectedSite.annualGenerationKWh / 1000)} MWh/yr yield
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    background: '#f0f9ff',
-                    border: '1px solid var(--blue-border)',
-                    borderRadius: '8px',
-                    padding: '8px 10px',
-                  }}
-                >
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Solar Resource (GHI)</span>
-                  <div
-                    style={{
-                      fontSize: '14px',
-                      fontWeight: 700,
-                      color: 'var(--text-pure-black)',
-                      marginTop: '2px',
-                    }}
-                  >
-                    {selectedSite.solarGHIKWhM2Year} kWh/m²
-                  </div>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                    Tilt {selectedSite.tiltDeg}° • Azimuth {selectedSite.azimuthDeg}°
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    background: '#f0f9ff',
-                    border: '1px solid var(--blue-border)',
-                    borderRadius: '8px',
-                    padding: '8px 10px',
-                  }}
-                >
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Daytime Self-Match</span>
-                  <div
-                    style={{
-                      fontSize: '14px',
-                      fontWeight: 700,
-                      color: 'var(--blue-sky)',
-                      marginTop: '2px',
-                    }}
-                  >
-                    {selectedSite.selfConsumptionPct}%
-                  </div>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                    Peak load {selectedSite.peakDemandKW} kW
-                  </span>
-                </div>
-              </div>
-
-              {/* Pre-Feasibility Checklist & Data Gaps */}
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid var(--blue-border)',
-                  borderRadius: '8px',
-                  padding: '10px 12px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-pure-black)' }}>
-                    Site Verification & Data Gaps
-                  </span>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Pre-Feasibility Audit</span>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Roof Condition:</span>
-                    <span style={{ color: selectedSite.flags.roofConditionVerified ? 'var(--blue-sky)' : 'var(--text-dark)', fontWeight: 600 }}>
-                      {selectedSite.roofCondition} ({selectedSite.flags.roofConditionVerified ? 'Verified' : 'Pending'})
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Structural Suitability:</span>
-                    <span style={{ color: 'var(--text-dark)', fontWeight: 600 }}>
-                      {selectedSite.structuralSuitability}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Shading Factor:</span>
-                    <span style={{ color: 'var(--blue-sky)', fontWeight: 600 }}>
-                      {selectedSite.shadingFactorPct}%
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Substation Proximity:</span>
-                    <span style={{ color: 'var(--text-dark)', fontWeight: 600 }}>
-                      {selectedSite.substationDistanceM}m
-                    </span>
-                  </div>
-                </div>
-
-                {/* Specific Notes */}
-                {selectedSite.flags.notes.length > 0 && (
-                  <div
-                    style={{
-                      marginTop: '8px',
-                      paddingTop: '8px',
-                      borderTop: '1px solid var(--blue-border)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px',
-                      fontSize: '10.5px',
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    {selectedSite.flags.notes.map((n, i) => (
-                      <div key={i} style={{ display: 'flex', gap: '6px' }}>
-                        <span style={{ color: 'var(--blue-sky)' }}>•</span>
-                        <span>{n}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Natural Explanation Box */}
-              <div
-                style={{
-                  background: '#f0f9ff',
-                  border: '1px solid var(--blue-border)',
-                  borderRadius: '8px',
-                  padding: '10px 12px',
-                }}
-              >
-                <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--blue-sky)', marginBottom: '3px' }}>
-                  Planning Rationale
-                </div>
-                <p style={{ fontSize: '11px', color: 'var(--text-charcoal)', lineHeight: 1.45 }}>
-                  {selectedSite.aiRecommendationRationale}
-                </p>
-              </div>
-
-              <button
-                onClick={() => onViewDeepDive(selectedSite)}
-                className="btn btn-primary"
-                style={{ width: '100%', fontSize: '12px' }}
-              >
-                Open Full Technical Specification
-                <ArrowRight size={13} />
-              </button>
-            </div>
-          ) : (
-            <div className="glass-card" style={{ padding: '24px', textAlign: 'center' }}>
-              <p style={{ color: 'var(--text-muted)' }}>Select a candidate building on the map.</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  function chooseRegion(value: RoofRegion) {
+    sequence.current++; setAnalyzing(false); setAnalysisError(''); setQuery(value.name); setRegion({ ...value }); setResults([]); setSearchError('');
+    setSelectedOutline([]); setAssessment(null); setTracing(false); setTracePoints([]); setMessage('Loading the selected region…');
+  }
+  async function search(event: React.FormEvent) {
+    event.preventDefault(); if (!query.trim()) return;
+    setSearching(true); setSearchError('');
+    try { const values = await roofApi.regions(query.trim()); if (values.length === 1) chooseRegion(values[0]); else setResults(values); if (!values.length) setSearchError('No Selangor location found. Try a town or neighbourhood name.'); }
+    catch (error) { setSearchError((error as Error).message); }
+    finally { setSearching(false); }
+  }
+  async function analyze(selection: { buildingId?: string; outline?: Point[] }) {
+    const current = ++sequence.current;
+    setAnalyzing(true); setAnalysisError(''); setAssessment(null);
+    try {
+      const result = await roofApi.analyze(selection);
+      if (current !== sequence.current) return;
+      setAssessment(result); setSelectedOutline(result.outline);
+      setHistory(previous => [result, ...previous.filter(item => item.id !== result.id)].slice(0, 20));
+    } catch (error) { if (current === sequence.current) setAnalysisError((error as Error).message); }
+    finally { if (current === sequence.current) setAnalyzing(false); }
+  }
+  function selectBuilding(building: RoofBuilding) {
+    setTracing(false); setTracePoints([]); setSelectedOutline(building.outline);
+    const selection = { buildingId: building.id }; setMessage(''); analyze(selection);
+  }
+  function selectPoint(point: Point) {
+    const found = buildings.filter(building => contains(point, building.outline)).sort((a, b) => a.areaSqM - b.areaSqM)[0];
+    if (found) selectBuilding(found);
+    else { sequence.current++; setAnalyzing(false); setSelectedOutline([]); setAssessment(null); setAnalysisError(''); setMessage(loading ? 'Building outlines are still loading. Wait, then click the roof again, or use Trace roof.' : 'No mapped footprint at this point. Choose Trace roof and click the roof corners to measure it.'); }
+  }
+  function startTrace() {
+    sequence.current++; setAnalyzing(false); setTracing(true); setTracePoints([]); setAssessment(null); setSelectedOutline([]); setAnalysisError('');
+    setMessage('Click around the outside corners of one roof. Add at least 3 points, then choose Analyze traced roof.');
+  }
+  function finishTrace() {
+    const outline: Point[] = [...tracePoints, tracePoints[0]];
+    const selection = { outline }; setSelectedOutline(outline); setTracing(false); setTracePoints([]); analyze(selection);
+  }
+  function restore(item: RoofAssessment) {
+    sequence.current++; setAnalyzing(false); setAssessment(item); setAnalysisError(''); setSelectedOutline(item.outline);
+    setRegion({ id: item.id, name: item.name, label: 'Saved roof location', coordinates: item.coordinates, zoom: 19, sourceUrl: item.sources.geometryUrl || '' });
+    setTracing(false); setTracePoints([]);
+  }
+  const selectionSequence = sequence.current;
+  const metrics = assessment?.metrics;
+  const value = (number: number | null | undefined, unit: string) => number === null || number === undefined ? 'Not available' : `${fmt(number, 2)} ${unit}`;
+  const googleLink = `https://www.google.com/maps/@?api=1&map_action=map&center=${(assessment?.coordinates || region.coordinates).join(',')}&zoom=19&basemap=satellite`;
+  return <div className="page-stack">
+    <div className="page-heading"><div><h1>Explore a real site</h1><p>Choose a roof to analyse solar potential and plan EV charging.</p></div><span className="eyebrow">Selangor</span></div>
+    <div><div className="roof-search-bar"><form onSubmit={search} className="roof-search"><label className="roof-search-label"><Search size={18} /><input aria-label="Search Selangor region" value={query} onChange={event => setQuery(event.target.value)} maxLength={120} placeholder="Search a town or neighbourhood…" /></label><button className="btn btn-primary" disabled={searching || !query.trim()}>{searching ? 'Searching…' : 'Search'}</button></form><div className="region-shortcuts">{STARTER_REGIONS.map(item => <button key={item.id} className="btn btn-secondary" onClick={() => chooseRegion(item)}>{item.name}</button>)}</div></div>{searchError && <p role="alert" className="notice">{searchError}</p>}{!!results.length && <div className="page-stack">{results.map(item => <button className="btn btn-secondary" key={item.id} onClick={() => chooseRegion(item)}>{item.label}</button>)}</div>}</div>
+    <div className="roof-explorer-grid"><div className="page-stack" style={{ minWidth: 0, gap: 10 }}>
+      <section className="glass-card" style={{ overflow: 'hidden' }}><div className="map-toolbar"><strong>{region.name}</strong><button className={`btn ${tracing ? 'btn-primary' : 'btn-secondary'}`} onClick={startTrace}><PencilRuler size={14} />Trace outline</button><details className="map-options"><summary className="btn btn-ghost">Map options</summary><div className="map-options-panel"><label><input type="checkbox" checked={outlinesVisible} onChange={event => setOutlinesVisible(event.target.checked)} />Show building outlines</label><button className="btn btn-secondary" onClick={() => setReload(item => item + 1)} disabled={loading}><RotateCcw size={14} />Reload outlines</button><a href={googleLink} target="_blank" rel="noreferrer">Open Google satellite maps ↗</a><a href={region.sourceUrl || 'https://www.openstreetmap.org'} target="_blank" rel="noreferrer">Location source ↗</a><p className="help-note">Imagery: Esri. Footprints: OpenStreetMap. These are public map records, not roof surveys.</p></div></details></div>
+        {tracing && <div className="trace-toolbar"><span>{tracePoints.length} corners</span><button className="btn btn-primary" disabled={tracePoints.length < 3 || analyzing} onClick={finishTrace}>Use traced outline</button><button className="btn btn-secondary" onClick={() => setTracePoints(points => points.slice(0, -1))}>Undo</button><button className="btn btn-ghost" onClick={() => { setTracing(false); setTracePoints([]); }}>Cancel</button></div>}
+        <RoofSatelliteMap region={region} buildings={outlinesVisible ? buildings : []} selected={selectedOutline} tracing={tracing} tracePoints={tracePoints} onViewport={(bounds, zoom) => setViewport({ bounds, zoom })} onSelect={selectBuilding} onPoint={selectPoint} onTracePoint={point => setTracePoints(points => [...points, point])} />
+        <div role="status" aria-live="polite" className="map-status">{loading ? 'Loading public building outlines…' : coverage}{loadError && <p role="alert">{loadError}</p>}{message && <p>{message}</p>}</div>
+      </section><details className="disclosure"><summary>Mapped building list ({buildings.length})</summary><div className="disclosure-body" style={{ maxHeight: 240, overflow: 'auto', display: 'grid', gap: 6 }}>{buildings.map(item => <button className="btn btn-secondary" key={item.id} onClick={() => selectBuilding(item)} style={{ justifyContent: 'space-between' }}>{item.name}<span>{fmt(item.areaSqM, 1)} m² mapped</span></button>)}</div></details>
+    </div><aside className="page-stack">
+      <section className="glass-card roof-summary"><h3>Site evidence</h3>{analyzing && <p role="status" className="help-note">Reading this building's records…</p>}{analysisError && <p role="alert" className="notice">{analysisError}</p>}{!assessment && !analyzing && <div className="empty-roof"><MousePointer2 size={26} /><p>Select a building outline.<br />View source-backed geometry and a clearly labelled solar & EV scenario.</p></div>}
+        {assessment && metrics && <><p className="summary-name">{assessment.name}<br />{assessment.coordinates.map(number => number.toFixed(6)).join(', ')}</p><div className="roof-primary-stats">{[['Map-derived footprint', value(metrics.mappedFootprintSqM, 'm²')], ['Surveyed usable roof', value(metrics.surveyedUsableRoofSqM, 'm²')], ['Recorded solar generation', value(metrics.solarGenerationKWh, 'kWh')], ['Recorded facility electricity', value(metrics.siteElectricityKWh, 'kWh')]].map(([label, number]) => <div className="stat" key={label}><small>{label}</small><strong>{number}</strong></div>)}</div><p className="help-note">{assessment.geometryNote}</p><p className="help-note" style={{ marginTop: 10 }}>{assessment.evidence ? `Reporting period: ${assessment.evidence.periodStart} — ${assessment.evidence.periodEnd}. ${assessment.evidence.verificationStatus}` : 'No site measurements supplied. The scenario below uses disclosed assumptions; actual performance remains unknown.'}</p><button className="btn btn-primary" style={{ width: '100%', marginTop: 16 }} onClick={props.onOpenPlan}>Plan for this site →</button></>}
+      </section>
+      {assessment && <details className="disclosure"><summary>Geometry source and mapped tags</summary><div className="disclosure-body page-stack"><p>{assessment.sources.geometry}</p>{assessment.sources.geometryUrl && <a href={assessment.sources.geometryUrl} target="_blank" rel="noreferrer">Open source building ↗</a>}<p className="help-note">{assessment.sources.geometryFetchedAt ? `Fetched ${new Date(assessment.sources.geometryFetchedAt).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' })} MYT` : 'Source timestamp not recorded'}</p><dl className="detail-list">{Object.entries(assessment.tags).map(([key, item]) => <div key={key}><dt>{key}</dt><dd>{item}</dd></div>)}</dl><p className="help-note">OSM tags are community map labels, not an independent verification of building use or condition.</p></div></details>}
+    </aside></div>
+    {assessment && <ImplementationScenarioView key={assessment.siteKey} site={assessment} onChange={result => { if (selectionSequence === sequence.current) setAssessment(result); }} />}
+    <details className="disclosure"><summary>Saved site records ({history.length})</summary><div className="disclosure-body page-stack">{!history.length && <p className="help-note">Select a building to save its source-backed geometry and implementation scenario.</p>}{history.map(item => <button key={item.id} className="btn btn-secondary" style={{ justifyContent: 'space-between' }} onClick={async () => { try { restore(await roofApi.plan(item.id)); } catch (error) { setAnalysisError((error as Error).message); } }}>{item.name}<span>{fmt(item.footprintSqM, 1)} m² mapped</span></button>)}</div></details>
+  </div>;
 };
