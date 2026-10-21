@@ -28,4 +28,3 @@ def bootstrap(directory):
         if hashlib.sha256(path.read_bytes()).hexdigest() != entry['sha256']:
             raise ValueError('Public snapshot checksum mismatch')
         run_import(source, year=entry.get('year', 2025), file=path)
-
