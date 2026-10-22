@@ -88,6 +88,15 @@ writable storage paths. `FRONTEND_ORIGIN` controls an additional allowed origin.
 ## Explore
 
 Search for a Selangor town or use Sungai Buloh / Kota Damansara shortcuts.
+The **Building ranking** on Explore compares the outlines loaded in the current
+map view. Sort by modelled annual AC solar output, savings, payback, EV solar
+energy share, or mapped area; open a row to analyse that building. Each row uses
+its own saved scenario, or the default inputs, with the same backend calculator
+as the roof analysis. Equal values share a rank and unavailable values are
+unranked. Comparison does not create assessments or overwrite saved inputs.
+This is a scenario comparison, not an installation suitability score: actual
+structure, parking and electrical connection still need survey records.
+
 Satellite imagery shows individual roofs; cyan polygons are public building
 footprints. Click one to save its geometry and open **Plan for this site**.
 Unmapped roofs can be traced using at least three corners. Invalid, self-crossing
@@ -207,6 +216,7 @@ never at API startup. Scenario inputs persist per site in SQLite.
 - `GET /api/roofs/history`, `/api/roofs/plan/{assessment_id}`
 - `POST /api/roofs/evidence/{assessment_id}` — source-backed site record
 - `POST /api/roofs/scenario/{assessment_id}` — save editable solar/EV scenario inputs for this site
+- `POST /api/roofs/ranking` — rank up to 1,500 loaded building IDs by an explicit scenario metric, without saving assessments
 
 Old site/ranking/synthetic-demand/scenario/EV simulation endpoints return HTTP
 410. No demo assets are seeded at startup. The synthetic model is no longer

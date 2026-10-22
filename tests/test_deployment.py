@@ -82,6 +82,9 @@ def test_public_access_needs_no_password_and_keeps_visitors_separate(tmp_path, m
         retained = first.get('/api/roofs/plan/' + a['id']).json()
         assert retained['evidence']['siteElectricityKWh'] == 150
         assert retained['scenario']['inputs']['evChargers'] == 2
+        first_rank = first.post('/api/roofs/ranking', json={'buildingIds': [a['buildingId']]}).json()
+        second_rank = second.post('/api/roofs/ranking', json={'buildingIds': [b['buildingId']]}).json()
+        assert first_rank['rows'][0]['evChargers'] == 2 and second_rank['rows'][0]['evChargers'] == 4
         assert [row['id'] for row in first.get('/api/roofs/history').json()] == [a['id']]
         assert [row['id'] for row in second.get('/api/roofs/history').json()] == [b['id']]
     assert database.VISITOR_DB_PATH.get() is None

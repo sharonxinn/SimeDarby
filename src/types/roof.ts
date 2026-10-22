@@ -1,6 +1,13 @@
 export interface RoofRegion { id: string; name: string; label: string; coordinates: [number, number]; zoom: number; sourceUrl: string }
 export interface RoofBuilding { id: string; name: string; outline: [number, number][]; coordinates: [number, number]; areaSqM: number; buildingType: string; sourceUrl: string }
 export interface BuildingResponse { buildings: RoofBuilding[]; truncated: boolean; cached: boolean; fetchedAt: string; coverageNote: string }
+export type RankingCriterion = 'generation' | 'savings' | 'payback' | 'evSolarShare' | 'area';
+export interface BuildingRanking {
+  kind: 'modelled'; sortBy: RankingCriterion; total: number; basis: string; limitations: string;
+  rows: { id: string; name: string; rank: number | null; footprintSqM: number; proposedKWp: number;
+    annualACKWh: number | null; annualSavingsMYR: number | null; paybackYears: number | null;
+    capexMYR: number; evSolarSharePct: number | null; evChargers: number; hasSiteRecords: boolean }[];
+}
 export interface SiteEvidence {
   sourceReference: string; sourceDate: string; periodStart: string; periodEnd: string; measurementBoundary: string;
   dataCenterStatus: 'not_assessed' | 'operating' | 'proposed' | 'not_present'; verificationStatus?: string; notes?: string;
