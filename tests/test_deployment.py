@@ -76,6 +76,8 @@ def test_public_access_needs_no_password_and_keeps_visitors_separate(tmp_path, m
         assert a['scenario']['annualACKWh'] > 0  # Actual bundled public resource works per visitor.
         assert first.post('/api/roofs/evidence/' + a['id'], json=record(dataCenterStatus='not_assessed', siteElectricityKWh=150)).status_code == 200
         assert second.get('/api/roofs/plan/' + a['id']).status_code == 404
+        assert second.post('/api/roofs/report/' + a['id'], json={}).status_code == 404
+        assert second.post('/api/roofs/weather/' + a['id'], json={}).status_code == 404
         b = select(second, monkeypatch)
         assert b['evidence'] is None
         assert second.post('/api/roofs/scenario/' + b['id'], json={**b['scenario']['inputs'], 'evChargers': 4}).status_code == 200

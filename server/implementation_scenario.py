@@ -10,6 +10,7 @@ from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from pydantic import BaseModel, ConfigDict, Field
 from database import get_connection
+from weather_impact import describe_weather
 
 
 class ScenarioInputs(BaseModel):
@@ -33,7 +34,7 @@ class ScenarioInputs(BaseModel):
 
 def solar_observations():
     with closing(get_connection()) as conn:
-        return conn.execute("SELECT d.date,d.ghi_kwh_m2,r.source_url,r.completed_at,r.sha256,r.id FROM solar_daily d JOIN pipeline_runs r ON r.id=d.run_id WHERE r.status='succeeded' ORDER BY d.date").fetchall()
+        return conn.execute("SELECT d.date,d.ghi_kwh_m2,d.temperature_c,r.source_url,r.completed_at,r.sha256,r.id FROM solar_daily d JOIN pipeline_runs r ON r.id=d.run_id WHERE r.status='succeeded' ORDER BY d.date").fetchall()
 
 
 def resource_for(coordinates, observations=None):
@@ -60,7 +61,16 @@ def resource_for(coordinates, observations=None):
         distance = 6371 * 2 * math.asin(min(1, math.sqrt(hav)))
         if distance > 100:
             continue
+        monthly = []
+        for month in range(1, 13):
+            values = [r for r in selected if int(r['date'][5:7]) == month]
+            monthly.append({'month': f'{year}-{month:02}', 'days': len(values),
+                            'ghiKWhM2': sum(r['ghi_kwh_m2'] for r in values),
+                            'meanAmbientC': sum(r['temperature_c'] for r in values)/len(values)})
         return {'year': year, 'days': days, 'annualGHI': sum(r['ghi_kwh_m2'] for r in selected),
+                'monthly': monthly, 'meanAmbientC': sum(r['temperature_c'] for r in selected)/days,
+                'minDailyMeanAmbientC': min(r['temperature_c'] for r in selected),
+                'maxDailyMeanAmbientC': max(r['temperature_c'] for r in selected),
                 'coordinates': [lat, lng], 'distanceKm': round(distance, 1), 'sourceUrl': selected[0]['source_url'],
                 'importedAt': selected[0]['completed_at'], 'sha256': selected[0]['sha256'],
                 'description': 'NASA POWER regional gridded horizontal irradiance; not a rooftop measurement'}
@@ -94,7 +104,7 @@ def calculate(site, evidence, inputs, resource):
     parking = (evidence or {}).get('parkingBays')
     if parking is not None and p['evChargers'] > parking:
         warnings.insert(0, 'Proposed EV chargers exceed recorded parking bays; revise the scenario.')
-    return {'kind': 'modelled', 'updatedAt': datetime.now(timezone.utc).isoformat(), 'inputs': p, 'resource': resource,
+    result = {'kind': 'modelled', 'updatedAt': datetime.now(timezone.utc).isoformat(), 'inputs': p, 'resource': resource,
             'usableAreaSqM': area, 'areaBasis': 'Owner-supplied surveyed usable area' if surveyed is not None else 'Mapped footprint × assumed usable percentage',
             'panels': panels, 'proposedKWp': capacity, 'annualDCKWh': dc, 'annualACKWh': ac, 'annualSelfConsumedKWh': self_use,
             'capexMYR': capex, 'capexLowMYR': capex*(1-p['capexRangePct']/100), 'capexHighMYR': capex*(1+p['capexRangePct']/100),
@@ -114,6 +124,8 @@ def calculate(site, evidence, inputs, resource):
                          'EV annual kWh = charger count × kW × hours/day × 365 × utilisation. PV-to-EV = min(EV annual kWh, on-site PV × allocation). EV allocation is already included in on-site PV, never added twice.'],
             'references': [{'title': 'NASA POWER daily resource methodology', 'url': 'https://power.larc.nasa.gov/docs/services/api/temporal/daily/'},
                            {'title': 'Example 550 W module dimensions (Jinko 2278 × 1134 mm)', 'url': 'https://www.jinkosolar.com/uploads/619f40ec/JKM550-570N-72HL4-BDV-F1-EN.pdf'}]}
+    result['weather'] = describe_weather(result)
+    return result
 
 
 def for_site(site, evidence, inputs=None, observations=None):

@@ -1,4 +1,4 @@
-import type { BuildingResponse, RoofAssessment, RoofRegion, SiteEvidence, DataStatus, ScenarioInputs, BuildingRanking, RankingCriterion } from '../types/roof';
+import type { BuildingResponse, RoofAssessment, RoofRegion, SiteEvidence, DataStatus, ScenarioInputs, BuildingRanking, RankingCriterion, WeatherInputs, WeatherResult, ESGReport } from '../types/roof';
 const api = import.meta.env.VITE_API_BASE_URL || '/api';
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(api + path, { ...options, signal: options.signal || AbortSignal.timeout(65000) });
@@ -18,6 +18,8 @@ export const roofApi = {
   history: () => request<RoofAssessment[]>('/roofs/history'),
   ranking: (buildingIds: string[], sortBy: RankingCriterion, signal: AbortSignal) => request<BuildingRanking>('/roofs/ranking', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ buildingIds, sortBy }), signal }),
   plan: (id: string) => request<RoofAssessment>(`/roofs/plan/${encodeURIComponent(id)}`),
+  weather: (id: string, inputs: WeatherInputs) => request<WeatherResult>(`/roofs/weather/${encodeURIComponent(id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inputs) }),
+  esgReport: (id: string, metadata: { organisation: string; preparedBy: string }) => request<ESGReport>(`/roofs/report/${encodeURIComponent(id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(metadata) }),
   scenario: (id: string, data: ScenarioInputs) => request<RoofAssessment>(`/roofs/scenario/${encodeURIComponent(id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
   evidence: (id: string, data: SiteEvidence) => request<RoofAssessment>(`/roofs/evidence/${encodeURIComponent(id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
 };
