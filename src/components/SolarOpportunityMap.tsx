@@ -4,6 +4,7 @@ import { STARTER_REGIONS, type RoofRegion, type RoofBuilding, type RoofAssessmen
 import { roofApi } from '../api/roofClient';
 import { RoofSatelliteMap } from './RoofSatelliteMap';
 import { ImplementationScenarioView } from './ImplementationScenarioView';
+import { BuildingRankingView } from './BuildingRankingView';
 
 type Point = [number, number];
 interface Props { assessment: RoofAssessment | null; onAssessmentChange: (value: RoofAssessment | null) => void; onOpenPlan: () => void }
@@ -125,6 +126,7 @@ export const SolarOpportunityMap: React.FC<Props> = props => {
       </section>
       {assessment && <details className="disclosure"><summary>Geometry source and mapped tags</summary><div className="disclosure-body page-stack"><p>{assessment.sources.geometry}</p>{assessment.sources.geometryUrl && <a href={assessment.sources.geometryUrl} target="_blank" rel="noreferrer">Open source building ↗</a>}<p className="help-note">{assessment.sources.geometryFetchedAt ? `Fetched ${new Date(assessment.sources.geometryFetchedAt).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' })} MYT` : 'Source timestamp not recorded'}</p><dl className="detail-list">{Object.entries(assessment.tags).map(([key, item]) => <div key={key}><dt>{key}</dt><dd>{item}</dd></div>)}</dl><p className="help-note">OSM tags are community map labels, not an independent verification of building use or condition.</p></div></details>}
     </aside></div>
+    <BuildingRankingView buildings={buildings} selectedId={assessment?.buildingId} revision={assessment?.scenario.updatedAt} onSelect={selectBuilding} disabled={analyzing} />
     {assessment && <ImplementationScenarioView key={assessment.siteKey} site={assessment} onChange={result => { if (selectionSequence === sequence.current) setAssessment(result); }} />}
     <details className="disclosure"><summary>Saved site records ({history.length})</summary><div className="disclosure-body page-stack">{!history.length && <p className="help-note">Select a building to save its source-backed geometry and implementation scenario.</p>}{history.map(item => <button key={item.id} className="btn btn-secondary" style={{ justifyContent: 'space-between' }} onClick={async () => { try { restore(await roofApi.plan(item.id)); } catch (error) { setAnalysisError((error as Error).message); } }}>{item.name}<span>{fmt(item.footprintSqM, 1)} m² mapped</span></button>)}</div></details>
   </div>;

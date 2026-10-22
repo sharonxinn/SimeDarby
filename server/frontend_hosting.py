@@ -8,8 +8,13 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 
-def configure_hosting(app, directory=None, username='solarsync', password=None):
-    if password:
+def configure_hosting(app, directory=None, username='solarsync', password=None, public_access=False, visitor_directory=None, bundle=None):
+    if public_access:
+        from visitor_sessions import configure_visitor_sessions
+        if not visitor_directory:
+            raise ValueError('Public access requires a separate visitor storage directory')
+        configure_visitor_sessions(app, visitor_directory, bundle)
+    elif password:
         @app.middleware('http')
         async def require_access(request: Request, call_next):
             # Health reveals connectivity only; no records or configuration.

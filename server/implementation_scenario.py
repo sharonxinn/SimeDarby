@@ -31,10 +31,14 @@ class ScenarioInputs(BaseModel):
     evSolarAllocationPct: float = Field(25, ge=0, le=100)
 
 
-def resource_for(coordinates):
-    """Use only a complete, validated NASA import, with its actual source location."""
+def solar_observations():
     with closing(get_connection()) as conn:
-        rows = conn.execute("SELECT d.date,d.ghi_kwh_m2,r.source_url,r.completed_at,r.sha256,r.id FROM solar_daily d JOIN pipeline_runs r ON r.id=d.run_id WHERE r.status='succeeded' ORDER BY d.date").fetchall()
+        return conn.execute("SELECT d.date,d.ghi_kwh_m2,r.source_url,r.completed_at,r.sha256,r.id FROM solar_daily d JOIN pipeline_runs r ON r.id=d.run_id WHERE r.status='succeeded' ORDER BY d.date").fetchall()
+
+
+def resource_for(coordinates, observations=None):
+    """Use only a complete, validated NASA import, with its actual source location."""
+    rows = solar_observations() if observations is None else observations
     if not rows:
         return None
     from urllib.parse import urlparse, parse_qs
@@ -112,9 +116,9 @@ def calculate(site, evidence, inputs, resource):
                            {'title': 'Example 550 W module dimensions (Jinko 2278 × 1134 mm)', 'url': 'https://www.jinkosolar.com/uploads/619f40ec/JKM550-570N-72HL4-BDV-F1-EN.pdf'}]}
 
 
-def for_site(site, evidence, inputs=None):
+def for_site(site, evidence, inputs=None, observations=None):
     if inputs is None:
         with closing(get_connection()) as conn:
             row = conn.execute('SELECT inputs FROM implementation_scenarios WHERE site_key=?', (site['siteKey'],)).fetchone()
         inputs = ScenarioInputs.model_validate_json(row['inputs']) if row else ScenarioInputs()
-    return calculate(site, evidence, inputs, resource_for(site['coordinates']))
+    return calculate(site, evidence, inputs, resource_for(site['coordinates'], observations))

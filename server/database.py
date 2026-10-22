@@ -1,11 +1,13 @@
 import sqlite3
 import os
 import json
+from contextvars import ContextVar
 
 DB_PATH = os.getenv("SOLARSYNC_DB_PATH", os.path.join(os.path.dirname(__file__), "township_solar.db"))
+VISITOR_DB_PATH = ContextVar('visitor_db_path', default=None)
 
 def get_connection():
-    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn = sqlite3.connect(VISITOR_DB_PATH.get() or DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
     return conn

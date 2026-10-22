@@ -5,6 +5,8 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from test_evidence_mode import client
+from test_evidence_mode import select, record
+from roof_explorer import router
 from frontend_hosting import configure_hosting
 from bootstrap_public_data import bootstrap
 import pipeline
@@ -58,3 +60,31 @@ def test_bundle_checksum_failure_never_imports(client, tmp_path):
     with pytest.raises(ValueError, match='checksum'):
         bootstrap(tmp_path)
     assert pipeline.data_status()['solar']['rows'] == 0
+
+
+def test_public_access_needs_no_password_and_keeps_visitors_separate(tmp_path, monkeypatch):
+    (tmp_path / 'index.html').write_text('<!doctype html><title>Public SolarSync fixture</title>')
+    app = FastAPI()
+    app.include_router(router)
+    # A public deployment must work even if an older Render password remains set.
+    configure_hosting(app, tmp_path, password='old-deployment-password', public_access=True,
+                      visitor_directory=tmp_path / 'visitors', bundle=Path(__file__).resolve().parents[1] / 'deployment-data')
+    with TestClient(app) as first, TestClient(app) as second:
+        assert first.get('/').status_code == second.get('/').status_code == 200
+        assert first.cookies.get('solarsync_visitor') != second.cookies.get('solarsync_visitor')
+        a = select(first, monkeypatch)
+        assert a['scenario']['annualACKWh'] > 0  # Actual bundled public resource works per visitor.
+        assert first.post('/api/roofs/evidence/' + a['id'], json=record(dataCenterStatus='not_assessed', siteElectricityKWh=150)).status_code == 200
+        assert second.get('/api/roofs/plan/' + a['id']).status_code == 404
+        b = select(second, monkeypatch)
+        assert b['evidence'] is None
+        assert second.post('/api/roofs/scenario/' + b['id'], json={**b['scenario']['inputs'], 'evChargers': 4}).status_code == 200
+        retained = first.get('/api/roofs/plan/' + a['id']).json()
+        assert retained['evidence']['siteElectricityKWh'] == 150
+        assert retained['scenario']['inputs']['evChargers'] == 2
+        first_rank = first.post('/api/roofs/ranking', json={'buildingIds': [a['buildingId']]}).json()
+        second_rank = second.post('/api/roofs/ranking', json={'buildingIds': [b['buildingId']]}).json()
+        assert first_rank['rows'][0]['evChargers'] == 2 and second_rank['rows'][0]['evChargers'] == 4
+        assert [row['id'] for row in first.get('/api/roofs/history').json()] == [a['id']]
+        assert [row['id'] for row in second.get('/api/roofs/history').json()] == [b['id']]
+    assert database.VISITOR_DB_PATH.get() is None

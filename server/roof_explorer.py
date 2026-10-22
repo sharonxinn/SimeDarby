@@ -6,6 +6,7 @@ import time
 import urllib.parse
 import urllib.request
 import uuid
+from typing import Literal
 import xml.etree.ElementTree as ET
 from contextlib import closing
 from datetime import datetime, timezone, timedelta
@@ -15,7 +16,8 @@ from shapely.geometry import Polygon
 from database import get_connection
 from models.geospatial import calculate_footprint_and_usable_area
 from evidence_planner import SiteEvidence, build_plan, build_metrics
-from implementation_scenario import ScenarioInputs, for_site
+from implementation_scenario import ScenarioInputs, for_site, solar_observations
+from roof_ranking import rank_rows
 
 router = APIRouter(prefix='/api/roofs', tags=['Roof explorer'])
 BUILDING_API = 'https://api.openstreetmap.org/api/0.6/map'
@@ -283,3 +285,34 @@ def save_scenario(assessment_id: str, req: ScenarioInputs):
     with closing(get_connection()) as conn, conn:
         conn.execute('INSERT OR REPLACE INTO implementation_scenarios VALUES(?,?,?)', (assessment['siteKey'], req.model_dump_json(), datetime.now(timezone.utc).isoformat()))
     return enrich(assessment)
+
+
+class RankingRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    buildingIds: list[str] = Field(min_length=1, max_length=1500)
+    sortBy: Literal['generation', 'savings', 'payback', 'evSolarShare', 'area'] = 'generation'
+
+
+@router.post('/ranking')
+def rank_roofs(req: RankingRequest):
+    ids = list(dict.fromkeys(req.buildingIds))
+    with closing(get_connection()) as conn:
+        placeholders = ','.join('?' for _ in ids)
+        buildings = conn.execute(f'SELECT id,payload FROM building_footprints WHERE id IN ({placeholders})', ids).fetchall()
+    if len(buildings) != len(ids):
+        raise HTTPException(404, 'Some building outlines are no longer available. Reload the map outlines and try again.')
+    observations = solar_observations()
+    rows = []
+    for item in buildings:
+        building = json.loads(item['payload'])
+        site = {'siteKey': 'osm:' + item['id'], 'footprintSqM': building['areaSqM'], 'coordinates': building['coordinates']}
+        evidence = load_evidence(site['siteKey'])
+        scenario = for_site(site, evidence, observations=observations)
+        rows.append({'id': item['id'], 'name': building['name'], 'footprintSqM': building['areaSqM'],
+                     'proposedKWp': scenario['proposedKWp'], 'annualACKWh': scenario['annualACKWh'],
+                     'annualSavingsMYR': scenario['annualSavingsMYR'], 'paybackYears': scenario['paybackYears'],
+                     'capexMYR': scenario['capexMYR'], 'evSolarSharePct': scenario['ev']['annualSolarSharePct'],
+                     'evChargers': scenario['inputs']['evChargers'], 'hasSiteRecords': evidence is not None})
+    return {'kind': 'modelled', 'sortBy': req.sortBy, 'total': len(rows), 'rows': rank_rows(rows, req.sortBy),
+            'basis': 'Loaded building outlines only. Each building uses its own saved scenario, or default assumptions. Opening a building uses the same calculation.',
+            'limitations': 'A ranking of scenario estimates, not verified installation suitability. Surveyed roof condition, parking and utility connection still require evidence. Equal metric values share a rank; unavailable values are unranked.'}
