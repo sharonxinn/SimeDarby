@@ -38,12 +38,32 @@ export interface ScenarioInputs {
 }
 export interface ImplementationScenario {
   kind: 'modelled'; updatedAt: string; inputs: ScenarioInputs;
+  weather: WeatherProfile;
   resource: { year: number; days: number; annualGHI: number; coordinates: number[]; distanceKm: number; sourceUrl: string; importedAt: string; sha256: string; description: string } | null;
   usableAreaSqM: number; areaBasis: string; panels: number; proposedKWp: number;
   annualDCKWh: number | null; annualACKWh: number | null; annualSelfConsumedKWh: number | null;
   capexMYR: number; capexLowMYR: number; capexHighMYR: number; annualSavingsMYR: number | null; paybackYears: number | null; annualCO2Tonnes: number | null;
   ev: { connectedKW: number; annualChargingKWh: number; pvAllocatedKWh: number | null; annualSolarSharePct: number | null; remainingGridKWh: number | null; recordedSupplyMarginKW: number | null; supplyCheck: string };
   warnings: string[]; formulas: string[]; references: { title: string; url: string }[];
+}
+export interface WeatherProfile {
+  available: boolean; year: number | null; meanAmbientC: number | null; minDailyMeanAmbientC: number | null; maxDailyMeanAmbientC: number | null;
+  monthly: { month: string; days: number; ghiKWhM2: number; meanAmbientC: number; modelledACKWh: number | null }[];
+  capacityExplanation: string; basis: string; limits: string[];
+}
+export interface WeatherInputs { sunlightChangePct: number; cellTemperatureDeltaC: number; temperatureCoefficientPctPerC: number }
+export interface WeatherResult {
+  kind: string; inputs: WeatherInputs; proposedKWp: number; generationChangePct: number | null;
+  annualDCKWh: number | null; annualACKWh: number | null; annualSavingsMYR: number | null;
+  annualCO2Tonnes: number | null; paybackYears: number | null; evSolarSharePct: number | null;
+  basis: string; formula: string; thermalNote: string; referenceUrl: string;
+}
+export interface ESGReport {
+  title: string; siteName: string; generatedAt: string; organisation: string; preparedBy: string; recordPeriod: string; html: string;
+  missingEvidence: string[]; limitations: string[];
+  sections: { title: string; description: string; metrics: { label: string; value: string; basis: string }[]; actions: string[] }[];
+  siteKey: string; assessmentId: string; coordinates: number[]; assumptions: ScenarioInputs;
+  monthlyWeather: WeatherProfile['monthly']; references: { title: string; url: string }[];
 }
 export interface RoofAssessment {
   id: string; dataMode: 'evidence_only'; createdAt: string; siteKey: string; name: string;

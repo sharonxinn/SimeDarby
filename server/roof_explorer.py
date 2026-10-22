@@ -18,6 +18,8 @@ from models.geospatial import calculate_footprint_and_usable_area
 from evidence_planner import SiteEvidence, build_plan, build_metrics
 from implementation_scenario import ScenarioInputs, for_site, solar_observations
 from roof_ranking import rank_rows
+from weather_impact import WeatherSensitivity, sensitivity
+from esg_report import ReportMetadata, build_report
 
 router = APIRouter(prefix='/api/roofs', tags=['Roof explorer'])
 BUILDING_API = 'https://api.openstreetmap.org/api/0.6/map'
@@ -291,6 +293,17 @@ class RankingRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     buildingIds: list[str] = Field(min_length=1, max_length=1500)
     sortBy: Literal['generation', 'savings', 'payback', 'evSolarShare', 'area'] = 'generation'
+
+
+@router.post('/weather/{assessment_id}')
+def weather_sensitivity(assessment_id: str, req: WeatherSensitivity):
+    site = enrich(load_assessment(assessment_id))
+    return sensitivity(site['scenario'], req)
+
+
+@router.post('/report/{assessment_id}')
+def esg_report(assessment_id: str, req: ReportMetadata):
+    return build_report(enrich(load_assessment(assessment_id)), req)
 
 
 @router.post('/ranking')

@@ -116,6 +116,36 @@ preserved for audit; they do not populate the current pages.
 
 ## Plan: selected site only
 
+### Weather and ESG reports
+
+Explore shows the selected roof's **Weather & solar generation** panel, using
+the complete imported NASA year. Daily horizontal irradiance and 2 m air
+temperature are aggregated into real monthly profiles; monthly modelled AC
+output reconciles to the saved annual estimate. Air temperature is not measured
+panel temperature and is not applied as an additional annual thermal loss.
+Rainfall, wind and a clear-sky cloud-loss baseline are not available and their
+separate impacts are not fabricated.
+
+The weather sensitivity form changes sunlight and panel-cell temperature
+relative to the base case, using an editable power-temperature coefficient.
+It applies `base energy × (1 + sunlight%/100) × (1 + coefficient%/100 × ΔT)`.
+This is an illustrative first-order sensitivity, not an hourly PVWatts model,
+weather forecast or climate projection. Nameplate kWp stays fixed. Savings,
+payback and EV solar allocation adjust consistently; the saved base case and
+ranking are not overwritten.
+
+Plan includes an **ESG planning report** generator. Organisation/author fields
+are optional and blank by default. Generate a report, download the complete
+HTML file, or choose **Print / Save PDF** for an in-page print document. Reports
+cover actual environmental records, modelled solar/EV potential, weather and
+data centres, social/access/safety actions, and governance/source provenance.
+Recorded periods, historical resource years and annual estimates remain
+distinct. No ESG score, Scope 1/2/3 inventory, assurance, GRI compliance or
+regulatory approval is invented. Missing evidence is listed explicitly.
+Report text is escaped, and each visitor can generate reports only for their
+own assessments. Reports and hypothetical weather results do not add site
+measurement records or modify the saved scenario.
+
 Plan has no sample projects or preselected venue portfolio. It uses the selected
 Explore record and provides conditional next steps for:
 
@@ -217,6 +247,8 @@ never at API startup. Scenario inputs persist per site in SQLite.
 - `POST /api/roofs/evidence/{assessment_id}` — source-backed site record
 - `POST /api/roofs/scenario/{assessment_id}` — save editable solar/EV scenario inputs for this site
 - `POST /api/roofs/ranking` — rank up to 1,500 loaded building IDs by an explicit scenario metric, without saving assessments
+- `POST /api/roofs/weather/{assessment_id}` — hypothetical sunlight/temperature sensitivity; does not save changes
+- `POST /api/roofs/report/{assessment_id}` — generate structured ESG report and printable HTML for the selected site
 
 Old site/ranking/synthetic-demand/scenario/EV simulation endpoints return HTTP
 410. No demo assets are seeded at startup. The synthetic model is no longer
